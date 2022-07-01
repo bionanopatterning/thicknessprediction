@@ -3,10 +3,9 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import pandas as pd
 
-# SETTINGS
+### ### ### ### ### ### ### SETTINGS ### ### ### ### ### ### ###
 dMin = 0
 dMax = 2001
-dStep = 1 # dont change
 
 lambda1 = 528
 lambda2 = 470
@@ -106,8 +105,6 @@ def _nrm(a):
     a -= np.amin(a)
     a /= np.amax(a)
 
-
-
 spectra = Spectrum(spectra_file_path)
 wavelength = np.linspace(wavelength_min, wavelength_max, wavelength_max - wavelength_min)
 
@@ -128,7 +125,7 @@ _nrm(spectrum_r)
 _nrm(spectrum_g)
 _nrm(spectrum_b)
 
-d = np.linspace(dMin, dMax, int((dMax - dMin) / dStep))
+d = np.linspace(dMin, dMax, int((dMax - dMin)))
 
 def reflectivity_from_spectrum(spectrum):
     reflectivity = np.zeros((len(d), len(wavelength)))
@@ -142,18 +139,14 @@ def reflectivity_from_spectrum(spectrum):
 r = reflectivity_from_spectrum(spectrum_r)
 g = reflectivity_from_spectrum(spectrum_g)
 b = reflectivity_from_spectrum(spectrum_b)
-r[d < 0] *= 0.9
-g[d < 0] *= 0.9
-b[d < 0] *= 0.8
-# Adjust rgb reflectivities for thickness < 0 to match simulation with actual images. GAN will output negative height values
-# these should be set to 0.
+a = np.maximum.accumulate(r)
 
 def thickness_to_rgb(thickness):
     if thickness > dMax:
         print(f"thickness {thickness} is higher than model's maximum thickness. adjust parameter in reflectivity_model.py")
         raise Exception()
-    idx = int((thickness - dMin) / dStep)
-    return (r[idx], g[idx], b[idx])
+    idx = int((thickness - dMin))
+    return (r[idx], g[idx], b[idx], a[idx])
 
 def plot_model():
     plt.figure("Reflectivity model")
