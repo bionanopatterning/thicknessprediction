@@ -7,7 +7,7 @@ import pyfastnoisesimd as fns
 import matplotlib.pyplot as plt
 import reflectivity_model
 
-### ### ### ### ### ### ### SETTINGS ### ### ### ### ### ### ###
+### ### ### ### ### ### ### ### SETTINGS ### ### ### ### ### ### ### ###
 
 folder = "220701_ValidationData/"
 

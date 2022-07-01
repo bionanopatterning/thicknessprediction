@@ -40,7 +40,7 @@ if __name__ == "__main__":
     model.load_model("220531_RGB_Model/checkpoints/")
     validate_folder("C:/Users/mgflast/PycharmProjects/HeightmapTensorflow/220701_ValidationData/")
 
-    ### ### EXAMPLE: TRAINING A NEW MODEL ### ###
+    ### EXAMPLE: TRAINING A NEW MODEL ###
     # ### ### ### ### ### ### ### ### SETTINGS ### ### ### ### ### ### ### ###
     # experiment_title = "220602_RGB_Model/"
     # training_data = "220602_RGB_Traindata/"
