@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import pandas as pd
 
-### ### ### ### ### ### ### ### SETTINGS ### ### ### ### ### ### ### ###
+# SETTINGS
 dMin = 0
 dMax = 2001
 dStep = 1 # dont change

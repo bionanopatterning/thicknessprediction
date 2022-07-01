@@ -4,12 +4,10 @@ import model
 import os
 
 if __name__ == "__main__":
-    ### ### ### ### ### ### ### ### SETTINGS ### ### ### ### ### ### ### ###
     experiment_title = "experiment_SingleChannel_470/"
     training_data = "trainData_G_1000nm/"
     maxHeight = 1000.0
 
-    ### ### ### ### ### ### ### ### ######## ### ### ### ### ### ### ### ###
     if not os.path.exists(experiment_title):
         os.mkdir(experiment_title)
 
@@ -29,7 +27,7 @@ if __name__ == "__main__":
         model.load_model(model)
         prediction = model.rgb_to_height(image)
         Image.fromarray(prediction).save(savepath)
-    # model = r"\experiment_SingleChannel_470\checkpoints"
-    # image = r"some_validation_image.png"
-    # savepath = r"output_prediction.tiff"
+    # model = r"C:\Users\mgflast\PycharmProjects\HeightmapTensorflow\experiment_SingleChannel_528_increasedPersistence\checkpoints"
+    # image = r"W:\mgflast\10. Reflection and thickness\Figure4\option7\R_256.png"
+    # savepath = r"W:\mgflast\10. Reflection and thickness\Figure4\option7\R_256_prediction.tiff"
     # process_image(model, image, savepath)

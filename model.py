@@ -6,8 +6,6 @@ import os
 import datetime
 import colorcet as cc
 
-### ### ### ### ### ### ### ### SETTINGS ### ### ### ### ### ### ### ###
-
 train_data_folder = "C:/Users/mgflast/Desktop/rgb_train_data/test_set_3000/"
 timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 train_progress_folder = "C:/Users/mgflast/Desktop/rgb_train_data/" + timestamp + "_training_progress/"
