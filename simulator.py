@@ -1,119 +1,137 @@
 import numpy as np
 import reflectivity_model
 from PIL import Image
-from scipy.ndimage import gaussian_filter
 import os
-import pyfastnoisesimd as fns
-import matplotlib.pyplot as plt
-import reflectivity_model
 
 ### ### ### ### ### ### ### ### SETTINGS ### ### ### ### ### ### ### ###
 
-folder = "220701_ValidationData/"
+folder = "trainData_B_1000nm/"
 
-N_IMAGES = 100
+N_IMAGES = 500
+IMG_WIDTH = 256 # Model works on 256 x 256 imgs.
+IMG_HEIGHT = 256
 
-# Settings for the ranges of parameters used by the perlin noise generator.
-# For every simulated image, a random value is drawn from these ranges. Note that the range for the frequency parameter is that of the logarithm of the parameter value, not the value itself.
-FREQUENCY_LOG_RANGE = [-2.5, -3]
-LACUNARITY_RANGE = [1.8, 2.5]
-GAIN_RANGE = [0.3, 0.5]
-PEAK_HEIGHT_RANGE = [500, 1000] # Thickness maps will be generated with a range of 0 to PEAK_HEIGHT
+OCTAVES = 6
+PERSISTENCE_MAX = 0.5
+PERSISTENCE_MIN = 0.2
+
+PEAK_RANGE = [500, 1000]
+ZERO_OFFSET = 200
+
+# output channels:
+R = True
+G = True
+B = True
 
 
-BACKGROUND_INTENSITY_LOW = 40
-BACKGROUND_INTENSITY_HI = 140
-BACKGROUND_STD = 0
-BLUR_RADIUS = 2
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 
-# Cells tend to be large flat regions of low thickness with steep, high thickness blobs near the center (nucleus). To add this feature to the simulated images, some of the heightmaps will have
-# the height 'remapped' according to the following function: f(h) = h * SLOPE_SCALE_FAC for h < SLOPE_SWITCH_HEIGHT, else f(h) = h - (1.0 - SLOPE_SCALE_FAC) * SLOPE_SWITCH_HEIGHT
-# I.e. flattening the slope somewhat for regions where the thickness is below some inflection value, and offsetting the height for regions above the inflection value
-# to ensure no discontinuous height jumps are generated. This remapping is not done for all simulated thickness maps, only for a fraction FRACTION_OF_DATASET_THAT_WILL_HAVE_SLOPE_REMAPPED
-SLOPE_SWITCH_HEIGHT_RANGE = [300, 600]
-SLOPE_SCALE_FAC_RANGE = [0.3, 0.6]
-FRACTION_OF_DATASET_THAT_WILL_HAVE_SLOPE_REMAPPED = 0.5
+if not os.path.exists(folder):
+    os.makedirs(folder)
 
-# below is a value that doesn't need to be touched, probably. It sets a minimum average height per pixel in a simulated thickness map. If the mean height in a simulated map is below this value,
-# a new thickness map is generated. Maps with low per-pixel averages are almost empty maps with a sparse few low peaks - i.e., they are unlike real samples, so we discard them.
-MINIMUM_PER_PIXEL_AVG_THICKNESS = 60
-def perlin_noise_img(octaves, frequency, lacunarity, gain):
-    perlin = fns.Noise(seed=np.random.randint(2 ** 31), numWorkers=4)
-    perlin.frequency = frequency
-    perlin.noiseType = fns.NoiseType.PerlinFractal
-    perlin.fractal.octaves = octaves
-    perlin.fractal.lacunarity = lacunarity
-    perlin.fractal.gain = gain
-    perlin.perturb.perturnType = fns.PerturbType.NoPerturb
-    return perlin.genAsGrid((256, 256))
+_imgs_saved = 0
+def generate_perlin_noise_2d(shape, res):
+    # source : https://pvigier.github.io/2018/06/13/perlin-noise-numpy.html
+    def f(t):
+        return 6*t**5 - 15*t**4 + 10*t**3
+    delta = (res[0] / shape[0], res[1] / shape[1])
+    d = (shape[0] // res[0], shape[1] // res[1])
+    grid = np.mgrid[0:res[0]:delta[0],0:res[1]:delta[1]].transpose(1, 2, 0) % 1
+    # Gradients
+    angles = 2*np.pi*np.random.rand(res[0]+1, res[1]+1)
+    gradients = np.dstack((np.cos(angles), np.sin(angles)))
+    g00 = gradients[0:-1,0:-1].repeat(d[0], 0).repeat(d[1], 1)
+    g10 = gradients[1:,0:-1].repeat(d[0], 0).repeat(d[1], 1)
+    g01 = gradients[0:-1,1:].repeat(d[0], 0).repeat(d[1], 1)
+    g11 = gradients[1:,1:].repeat(d[0], 0).repeat(d[1], 1)
+    # Ramps
+    n00 = np.sum(grid * g00, 2)
+    n10 = np.sum(np.dstack((grid[:,:,0]-1, grid[:,:,1])) * g10, 2)
+    n01 = np.sum(np.dstack((grid[:,:,0], grid[:,:,1]-1)) * g01, 2)
+    n11 = np.sum(np.dstack((grid[:,:,0]-1, grid[:,:,1]-1)) * g11, 2)
+    # Interpolation
+    t = f(grid)
+    n0 = n00*(1-t[:,:,0]) + t[:,:,0]*n10
+    n1 = n01*(1-t[:,:,0]) + t[:,:,0]*n11
+    return np.sqrt(2)*((1-t[:,:,1])*n0 + t[:,:,1]*n1)
 
-def generate_heightmap():
-    frequency = 10**np.random.uniform(FREQUENCY_LOG_RANGE[0], FREQUENCY_LOG_RANGE[1])
-    lacunarity = np.random.uniform(LACUNARITY_RANGE[0], LACUNARITY_RANGE[1])
-    gain = np.random.uniform(GAIN_RANGE[0], GAIN_RANGE[1])
-    noise = perlin_noise_img(octaves=8, frequency=frequency, lacunarity=lacunarity, gain=gain)
-    noise[noise < 0] = 0
-    if np.amax(noise) <= 0:
-        return generate_heightmap() # if all values < 0 (these noise values would be mapped to 0 nm thickness), just try agian
-    else:
-        peak_height = np.random.uniform(PEAK_HEIGHT_RANGE[0], PEAK_HEIGHT_RANGE[1])
-        heightmap = noise * peak_height / np.amax(noise)
-        if np.mean(heightmap) < MINIMUM_PER_PIXEL_AVG_THICKNESS:
-            return generate_heightmap() # If avg. thickness < this value, the image is too empty so try agian
-        else:
-            return heightmap
 
-def remap_heights(heightmap):
-    switch_height = np.random.uniform(SLOPE_SWITCH_HEIGHT_RANGE[0], SLOPE_SWITCH_HEIGHT_RANGE[1])
-    scale_fac = np.random.uniform(SLOPE_SCALE_FAC_RANGE[0], SLOPE_SCALE_FAC_RANGE[1])
-    for x in range(256):
-        for y in range(256):
-            h = heightmap[x, y]
-            if h < switch_height:
-                h *= scale_fac
-            else:
-                h -= (1.0 - scale_fac) * switch_height
-            heightmap[x, y] = h
-    return heightmap
+def gen_perlin_texture(shape, octaves=1, persistence=0.5):
+    # source : https://pvigier.github.io/2018/06/13/perlin-noise-numpy.html
+    noise = np.zeros(shape)
+    frequency = 1
+    amplitude = 1
+    for _ in range(octaves):
+        noise += amplitude * generate_perlin_noise_2d(shape, (int(frequency), int(frequency)))
+        frequency *= 2
+        amplitude *= persistence
+    noise -= np.amin(noise)
+    noise /= np.amax(noise)
+    return noise
+
+
+def gen_img():
+    noise = gen_perlin_texture((IMG_WIDTH, IMG_HEIGHT), octaves=OCTAVES, persistence=np.random.uniform(low=PERSISTENCE_MIN, high=PERSISTENCE_MAX))
+    noise *= (np.random.uniform(low=PEAK_RANGE[0], high=PEAK_RANGE[1]) + ZERO_OFFSET - reflectivity_model.dMin)
+    noise -= (ZERO_OFFSET - reflectivity_model.dMin)
+    max_height = np.amax(noise)
+    noise /= max_height
+    noise = noise * noise * np.sign(noise)
+    noise *= max_height
+    noise[noise < reflectivity_model.dMin] = reflectivity_model.dMin
+
+
+    rgb_image = np.zeros((IMG_WIDTH, IMG_HEIGHT, 3))
+    for x in range(IMG_WIDTH):
+        for y in range(IMG_HEIGHT):
+            rgbval = reflectivity_model.thickness_to_rgb(noise[x, y])
+            rgb_image[x, y, 0] = rgbval[0]
+            rgb_image[x, y, 1] = rgbval[1]
+            rgb_image[x, y, 2] = rgbval[2]
+    rgb_image[:, :, 0] -= np.amin(rgb_image[:, :, 0])
+    rgb_image[:, :, 0] /= np.amax(rgb_image[:, :, 0])
+    rgb_image[:, :, 1] -= np.amin(rgb_image[:, :, 1])
+    rgb_image[:, :, 1] /= np.amax(rgb_image[:, :, 1])
+    rgb_image[:, :, 2] -= np.amin(rgb_image[:, :, 2])
+    rgb_image[:, :, 2] /= np.amax(rgb_image[:, :, 2])
+    rgb_image *= 255
+
+    if not R:
+        rgb_image[:, :, 0] = 0
+    if not G:
+        rgb_image[:, :, 1] = 0
+    if not B:
+        rgb_image[:, :, 2] = 0
+    return noise, rgb_image.astype(int)
+
+
+def save_tiff(img):
+    image = Image.fromarray(img)
+    image.save(folder + f"00{_imgs_saved}_height.tiff")
+
+def save_png(rgb):
+    img = Image.fromarray(rgb.astype(np.uint8))
+    img = img.convert('RGB')
+    img.save(folder + f"00{_imgs_saved}_rgb.png")
+
+def save_pair(heightmap, rgb):
+    global _imgs_saved
+    save_tiff(heightmap)
+    save_png(rgb)
+    _imgs_saved += 1
 
 def heightmap_to_rgb(heightmap):
-    reflection_image = np.zeros((256, 256, 4))
-    for x in range(256):
-        for y in range(256):
-            rgba = reflectivity_model.thickness_to_rgb(heightmap[x, y])
-            reflection_image[x, y, 0] = rgba[0]
-            reflection_image[x, y, 1] = rgba[1]
-            reflection_image[x, y, 2] = rgba[2]
-            reflection_image[x, y, 3] = rgba[3]
-    return reflection_image
-
-def generate_background_img():
-    image = np.random.normal(loc = np.random.uniform(BACKGROUND_INTENSITY_LOW, BACKGROUND_INTENSITY_HI) / 255, scale = BACKGROUND_STD / 255, size=(256,256,3))
-    image = gaussian_filter(image, sigma = BLUR_RADIUS)
-    return image
-
-def generate_pair():
-    thickness = generate_heightmap()
-    if np.random.uniform(0, 1) > FRACTION_OF_DATASET_THAT_WILL_HAVE_SLOPE_REMAPPED:
-        thickness = remap_heights(thickness)
-    rgba = heightmap_to_rgb(thickness)
-    reflection = np.zeros((256, 256, 3))
-    background = generate_background_img()
-    for x in range(256):
-        for y in range(256):
-            alpha = rgba[x, y, 3]
-            reflection[x, y] = (1 - alpha) * background[x, y] + alpha * rgba[x, y, :3]
-    reflection *= 255
-    reflection = reflection.astype(np.uint8)
-
-    return thickness, reflection
+    x, y = np.shape(heightmap)
+    rgbimg = np.zeros((x, y, 3))
+    for i in range(x):
+        for j in range(y):
+            rgbimg[i, j, :] = reflectivity_model.thickness_to_rgb(heightmap[i, j])
+            rgbimg[i, j, :] *= 255
+    rgbimg = rgbimg.astype(np.uint8)
+    return rgbimg
 
 if __name__ == "__main__":
-    if not os.path.exists(folder):
-        os.makedirs(folder)
-
     for i in range(N_IMAGES):
-        thickness, reflection = generate_pair()
-        Image.fromarray(thickness).save(folder + f"00{i}_thickness.tiff")
+        heightmap, rgb = gen_img()
+        save_pair(heightmap, rgb)
 
-        png = Image.fromarray(reflection).convert('RGB').save(folder + f"00{i}_reflection.png")
