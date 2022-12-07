@@ -1,0 +1,9 @@
+numpy==1.22.3
+Pillow==9.1.0
+matplotlib==3.5.1
+colorcet==3.0.0
+pandas==1.4.2
+tensorflow-gpu==2.8.0
+scipy==1.8.1
+pyfastnoisesimd==0.4.2
+ipython==8.3.0

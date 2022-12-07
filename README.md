@@ -14,6 +14,10 @@ To test the code, we recommend cloning this repository into PyCharm and running 
 * pyplot
 * pandas
 * TensorFlow 2.8.0 (tensorflow-gpu)
+* pyfastnoisesimd
+* scipy
+* ipython
+
 
 We ran computations on a Quadro P2200 GPU, which in our case required installation of cuDNN version 8.1.0 and CUDA version 11.2. Our version of Python was 3.9.
 
