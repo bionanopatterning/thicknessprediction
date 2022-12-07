@@ -17,6 +17,7 @@ To test the code, we recommend cloning this repository into PyCharm and running 
 * pyfastnoisesimd
 * scipy
 * ipython
+
 A detailed list of requirements with version nr's can be found in requirements.txt
 
 We ran computations on a Quadro P2200 GPU, which in our case required installation of cuDNN version 8.1.0 and CUDA version 11.2. Our version of Python was 3.9.
